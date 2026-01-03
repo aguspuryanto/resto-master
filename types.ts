@@ -38,6 +38,7 @@ export interface Product {
   category: string;
   stock: number;
   image: string;
+  isDeleted?: boolean;
 }
 
 export interface OrderItem {
