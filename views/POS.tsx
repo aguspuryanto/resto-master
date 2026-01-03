@@ -15,7 +15,8 @@ import {
   Loader2,
   CheckCircle2,
   ChevronLeft,
-  ReceiptText
+  ReceiptText,
+  Printer
 } from 'lucide-react';
 import { Product, Order, OrderType, Table, TableStatus, OrderItem } from '../types';
 import { CATEGORIES, formatCurrency } from '../constants';
@@ -42,6 +43,7 @@ const POS: React.FC<POSProps> = ({ products, tables, onCompleteOrder, updateTabl
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(null);
   const [amountTendered, setAmountTendered] = useState<string>('');
   const [processingStatus, setProcessingStatus] = useState('');
+  const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
@@ -113,7 +115,99 @@ const POS: React.FC<POSProps> = ({ products, tables, onCompleteOrder, updateTabl
     }
 
     onCompleteOrder(newOrder);
+    setLastCompletedOrder(newOrder);
     setCheckoutStep('SUCCESS');
+  };
+
+  const handlePrintReceipt = () => {
+    if (!lastCompletedOrder) return;
+
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (!printWindow) {
+      alert('Please allow pop-ups to print receipts.');
+      return;
+    }
+
+    const itemsHtml = lastCompletedOrder.items.map(item => `
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+        <span>${item.quantity}x ${item.product.name}</span>
+        <span>${formatCurrency(item.product.price * item.quantity)}</span>
+      </div>
+    `).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Receipt ${lastCompletedOrder.id}</title>
+          <style>
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              padding: 20px; 
+              color: #000; 
+              font-size: 13px; 
+              line-height: 1.4;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .dashed { border-top: 1px dashed #000; margin: 10px 0; }
+            .flex { display: flex; justify-content: space-between; }
+            .header { margin-bottom: 15px; }
+            .footer { margin-top: 20px; font-size: 11px; }
+            @media print {
+              @page { margin: 0; }
+              body { margin: 1cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="center header">
+            <h2 style="margin: 0;">RESTOMASTER</h2>
+            <p style="margin: 2px 0;">Jl. Kuliner No. 123, Jakarta</p>
+            <p style="margin: 2px 0;">Telp: (021) 555-0123</p>
+          </div>
+          
+          <div class="dashed"></div>
+          
+          <div class="flex"><span>Date:</span> <span>${lastCompletedOrder.date.toLocaleString('id-ID')}</span></div>
+          <div class="flex"><span>Order ID:</span> <span>#${lastCompletedOrder.id}</span></div>
+          <div class="flex"><span>Type:</span> <span>${lastCompletedOrder.type}</span></div>
+          ${lastCompletedOrder.tableId ? `<div class="flex"><span>Table:</span> <span>${lastCompletedOrder.tableId}</span></div>` : ''}
+          
+          <div class="dashed"></div>
+          
+          <div class="bold" style="margin-bottom: 8px;">ITEMS</div>
+          ${itemsHtml}
+          
+          <div class="dashed"></div>
+          
+          <div class="flex"><span>Subtotal:</span> <span>${formatCurrency(lastCompletedOrder.subtotal)}</span></div>
+          <div class="flex"><span>Tax (10%):</span> <span>${formatCurrency(lastCompletedOrder.tax)}</span></div>
+          <div class="flex bold" style="font-size: 15px; margin-top: 5px;">
+            <span>TOTAL:</span> <span>${formatCurrency(lastCompletedOrder.total)}</span>
+          </div>
+          <div class="flex" style="margin-top: 5px;">
+            <span>Payment:</span> <span>${paymentMethod || 'PAID'}</span>
+          </div>
+          
+          <div class="dashed"></div>
+          
+          <div class="center footer">
+            <p class="bold">TERIMA KASIH</p>
+            <p>Selamat Menikmati Hidangan Kami!</p>
+            <p>www.restomaster.com</p>
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const resetPOS = () => {
@@ -122,6 +216,7 @@ const POS: React.FC<POSProps> = ({ products, tables, onCompleteOrder, updateTabl
     setCheckoutStep('CART');
     setPaymentMethod(null);
     setAmountTendered('');
+    setLastCompletedOrder(null);
   };
 
   const cashChange = parseFloat(amountTendered) - total;
@@ -380,7 +475,13 @@ const POS: React.FC<POSProps> = ({ products, tables, onCompleteOrder, updateTabl
                   </div>
 
                   <div className="flex gap-4 w-full max-w-sm">
-                    <button className="flex-1 border-2 border-slate-200 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all">Print Receipt</button>
+                    <button 
+                      onClick={handlePrintReceipt}
+                      className="flex-1 border-2 border-slate-200 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Printer size={18} />
+                      Print Receipt
+                    </button>
                     <button 
                       onClick={resetPOS}
                       className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-bold hover:shadow-xl hover:shadow-slate-200 transition-all"
